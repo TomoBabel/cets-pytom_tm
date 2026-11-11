@@ -1,0 +1,106 @@
+{
+    "mask": "Runs/003328_ProtPytomTemplateMatching/extra/Mask.mrc",
+    "mask_is_spherical": true,
+    "output_dir": "Runs/003392_ProtPytomExtractCoordinates/extra/TS_03",
+    "tomogram": "Runs/003328_ProtPytomTemplateMatching/extra/TS_03/TS_03_tomo.mrc",
+    "template": "Runs/003328_ProtPytomTemplateMatching/extra/Reference.mrc",
+    "tomo_id": "TS_03_tomo",
+    "ts_metadata": {
+        "tilt_angles": [
+            -57.0,
+            -54.0
+        ],
+        "angles_in_degrees": true,
+        "ctf_data": [
+            {
+                "defocus": 1.4637999999999999e-06,
+                "amplitude_contrast": 0.07,
+                "voltage": 300000.0,
+                "spherical_aberration": 0.0027,
+                "phase_shift_deg": 0.0,
+                "flip_phase": false,
+                "__class__": "CtfData"
+            },
+            {
+                "defocus": 1.46375e-06,
+                "amplitude_contrast": 0.07,
+                "voltage": 300000.0,
+                "spherical_aberration": 0.0027,
+                "phase_shift_deg": 0.0,
+                "flip_phase": false,
+                "__class__": "CtfData"
+            }
+        ],
+        "dose_accumulation": [
+            117.0,
+            108.0
+        ],
+        "defocus_handedness": 0,
+        "per_tilt_weighting": true,
+        "level_angle_x": 0.0,
+        "level_angle_y": 0.0,
+        "__class__": "TiltSeriesMetaData"
+    },
+    "tomo_shape": [
+        480,
+        464,
+        140
+    ],
+    "template_shape": [
+        48,
+        48,
+        48
+    ],
+    "mask_shape": [
+        48,
+        48,
+        48
+    ],
+    "voxel_size": 5.4,
+    "tomogram_mask": null,
+    "whole_start": null,
+    "sub_start": [
+        0,
+        0,
+        0
+    ],
+    "sub_step": [
+        480,
+        464,
+        140
+    ],
+    "start_slice": 0,
+    "steps_slice": 1,
+    "rotational_symmetry": 6,
+    "particle_diameter": null,
+    "rotation_file": "30.0",
+    "n_rotations": 108,
+    "low_pass": null,
+    "high_pass": null,
+    "whiten_spectrum": false,
+    "whitening_filter": "Runs/003328_ProtPytomTemplateMatching/extra/TS_03/TS_03_tomo_whitening_filter.npy",
+    "random_phase_correction": false,
+    "rng_seed": 5398552386867375540,
+    "job_key": "0",
+    "leader": null,
+    "job_stats": {
+        "search_space": 3367526400,
+        "variance": 0.0005523198051378131,
+        "std": 0.023501485168767804
+    },
+    "log_level": 20,
+    "pytom_tm_version_number": "0.14.0",
+    "output_dtype": "float32",
+    "search_x": [
+        0,
+        480
+    ],
+    "search_y": [
+        0,
+        464
+    ],
+    "search_z": [
+        0,
+        140
+    ]
+}

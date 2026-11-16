@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -24,6 +25,7 @@ from pytom_tm.constants import (
     LCC_MAX,
     MICROGRAPH_NAME,
     PARTICLES_BLOCK,
+    SEARCH_STD,
     STAR_EXT,
     TILT_SERIES_PIXEL_SIZE,
     TOMO_NAME,
@@ -32,9 +34,12 @@ from pytom_tm.utils.job import PytomJob
 from pytom_tm.utils.utils import (
     gen_array_to_physical,
     gen_coordinate_systems,
+    get_voxel_size,
+    matrix_to_relion_euler,
     read_star_table,
     relion_euler_to_matrix,
     validate_file,
+    write_star_table,
 )
 
 StarTable = Dict[str, List[str]]
@@ -187,6 +192,149 @@ class PytomCoordinates3D:
             coordinate_systems=coordinate_systems,
             coordinate_transformations=coordinate_transformations,
         )
+
+    def cets_to_pytom_tm(
+        self,
+        coordinates: PointMatrixSet3D,
+        star_file: os.PathLike,
+        tomo_name: str,
+        pixel_size: Optional[float] = None,
+        cut_off: Optional[float] = None,
+        search_std: Optional[float] = None,
+        relion5_compat: bool = False,
+        tomo_shape: Optional[Tuple[int, int, int]] = None,
+        job: Optional[PytomJob] = None,
+    ) -> Path:
+        """Writes the particles of a CETS ``PointMatrixSet3D`` annotation as a particles star
+        file, as pytom_extract_candidates.py does (<tomo_name>_particles.star).
+
+        * Positions: ``origin3D``, written by default as the 0-based voxels of the tomogram
+          (rlnCoordinateX/Y/Z) or, with ``relion5_compat``, in Å relative to the centre of
+          the tomogram (rlnCenteredCoordinateX/Y/ZAngst), doing the same operation as
+          pytom-match-pick. The latter needs the size and voxel size of the tomogram.
+        * rlnAngleRot/Tilt/Psi: the RELION Euler angles of ``matrix3D`` (see
+          ``matrix_to_relion_euler``). When tilt is 0 or 180 they may differ from the
+          original ones, but they describe the same rotation. 0 if the annotation has no
+          orientations.
+        * rlnLCCmax: ``scores``. 0 if the annotation has no scores.
+        * rlnCutOff and rlnSearchStd: the given ``cut_off`` and ``search_std``, as CETS
+          does not store them (the cut-off may be the ``threshold`` of the annotation of the
+          scores map). The columns are not written when they are not given.
+        * Voxel size of the tomogram (rlnDetectorPixelSize or, with ``relion5_compat``,
+          rlnTomoTiltSeriesPixelSize) and its name (rlnMicrographName / rlnTomoName).
+
+        The values are written with 6 decimals, as pytom-match-pick does.
+
+        :param coordinates: the picked particles.
+        :type coordinates: PointMatrixSet3D.
+
+        :param star_file: path of the star file to be written.
+        :type star_file: os.PathLike.
+
+        :param tomo_name: name of the tomogram of the particles, as pytom-match-pick names
+        it: the name of the tomogram file without extension.
+        :type tomo_name: str.
+
+        :param pixel_size: sampling rate (Å/px) of the tomogram. If given, it is used;
+        otherwise it is taken from ``job`` or from the annotation. Without any of them, the
+        column is not written.
+        :type pixel_size: float, optional. Defaults to None.
+
+        :param cut_off: score cut-off used to extract the particles.
+        :type cut_off: float, optional. Defaults to None.
+
+        :param search_std: standard deviation of the template matching search.
+        :type search_std: float, optional. Defaults to None.
+
+        :param relion5_compat: write the RELION5 flavour of the star file (--relion5-compat).
+        :type relion5_compat: bool, optional. Defaults to False.
+
+        :param tomo_shape: size (x, y, z), in voxels, of the tomogram. Only needed with
+        ``relion5_compat``, when there is no ``job``.
+        :type tomo_shape: Tuple[int, int, int], optional. Defaults to None.
+
+        :param job: template matching job of the tomogram. With ``relion5_compat``, it
+        provides the size of the tomogram and, for the jobs created from RELION5 tomograms,
+        the binning and the tilt-series pixel size the centred positions refer to.
+        :type job: PytomJob, optional. Defaults to None.
+
+        :returns: the path of the star file written.
+        """
+        if pixel_size is not None and pixel_size <= 0:
+            raise ValueError(f"The pixel size must be positive. Got: {pixel_size}")
+        star_path = Path(star_file).expanduser()
+        if star_path.suffix != STAR_EXT:
+            raise ValueError(
+                f"Invalid file extension '{star_path.suffix}'. Expected: {STAR_EXT}"
+            )
+        origin_3d = np.array(coordinates.origin3D or [], dtype=float)
+        if origin_3d.size == 0:
+            raise ValueError(f"The annotation [{coordinates.id}] has no particles.")
+        n_particles = origin_3d.shape[0]
+        for field, values in (
+            ("matrix3D", coordinates.matrix3D),
+            ("scores", coordinates.scores),
+        ):
+            if values is not None and len(values) != n_particles:
+                raise ValueError(
+                    f"The annotation [{coordinates.id}] has {n_particles} particles, but "
+                    f"{len(values)} {field}."
+                )
+        if pixel_size is None:
+            pixel_size = (
+                job.voxel_size if job is not None else None
+            ) or get_voxel_size(coordinates)
+
+        if relion5_compat:
+            dims = job.tomo_shape if job is not None else tomo_shape
+            if dims is None or not pixel_size:
+                raise ValueError(
+                    "The size and voxel size of the tomogram are needed to write the "
+                    "positions relative to its centre (relion5_compat). Provide the job, "
+                    "or tomo_shape and pixel_size."
+                )
+            dims_array = np.array(dims, dtype=float)
+            if job is not None and job.relion_binning and job.relion_ts_pixel_size:
+                binning = job.relion_binning
+                center = dims_array * binning / 2 - 1
+                positions = (origin_3d * binning - center) * job.relion_ts_pixel_size
+            else:
+                positions = (origin_3d - dims_array / 2) * pixel_size
+            position_columns = (CENTERED_COORD_X, CENTERED_COORD_Y, CENTERED_COORD_Z)
+            pixel_size_column, tomo_name_column = TILT_SERIES_PIXEL_SIZE, TOMO_NAME
+        else:
+            positions = origin_3d
+            position_columns = (COORD_X, COORD_Y, COORD_Z)
+            pixel_size_column, tomo_name_column = DETECTOR_PIXEL_SIZE, MICROGRAPH_NAME
+
+        if coordinates.matrix3D is not None:
+            angles = np.array(
+                [matrix_to_relion_euler(np.array(m)) for m in coordinates.matrix3D]
+            )
+        else:
+            angles = np.zeros((n_particles, 3))
+        scores = coordinates.scores or [0.0] * n_particles
+
+        def column(values: object) -> List[str]:
+            array = np.broadcast_to(np.asarray(values, dtype=float), n_particles)
+            return [f"{value:.6f}" for value in array]
+
+        table: StarTable = {}
+        for i, label in enumerate(position_columns):
+            table[label] = column(positions[:, i])
+        for i, label in enumerate((ANGLE_ROT, ANGLE_TILT, ANGLE_PSI)):
+            table[label] = column(angles[:, i])
+        table[LCC_MAX] = column(scores)
+        if cut_off is not None:
+            table[CUT_OFF] = column(cut_off)
+        if search_std is not None:
+            table[SEARCH_STD] = column(search_std)
+        if pixel_size:
+            table[pixel_size_column] = column(pixel_size)
+        table[tomo_name_column] = [tomo_name] * n_particles
+        write_star_table(star_path, PARTICLES_BLOCK, table)
+        print(f"star file successfully written! -> {star_path}")
+        return star_path
 
     @staticmethod
     def get_annotation_id(tomo_id: str) -> str:

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Optional
 
 from cets_data_model.models.models import (
@@ -8,10 +9,12 @@ from cets_data_model.models.models import (
     ProbabilityMapValueType,
 )
 from cets_data_model.utils.image_utils import get_mrc_info
-from pytom_tm.constants import MRC_EXT
+from pytom_tm.constants import MRC_EXT, SCORES_SUFFIX
 from pytom_tm.utils.utils import (
+    export_mrc,
     gen_array_to_physical,
     gen_coordinate_systems,
+    get_voxel_size,
     validate_file,
 )
 
@@ -88,6 +91,54 @@ class PytomScoreTomogram:
                     voxel_size, array_cs.name, physical_cs.name, ndim=3
                 )
             ],
+        )
+
+    def cets_to_pytom_tm(
+        self,
+        scores: ProbabilityMap3D,
+        output_directory: os.PathLike,
+        tomo_name: str,
+        copy: bool = False,
+    ) -> Path:
+        """Makes the scores map of a CETS ``ProbabilityMap3D`` annotation available with the
+        name pytom-match-pick gives it (<tomo_name>_scores.mrc), in the output directory of a
+        job.
+
+        The map itself is the mrc file the annotation points to, so nothing is converted: it
+        is linked, or copied if requested or if the sampling rate of its header is not the
+        one of the annotation (the header of the copy is then updated).
+
+        CETS does not store the rest of the files of the job that
+        pytom_extract_candidates.py needs: the angles map (<tomo_name>_angles.mrc) and the
+        job file (<tomo_name>_job.json).
+
+        :param scores: the scores map annotation.
+        :type scores: ProbabilityMap3D.
+
+        :param output_directory: directory in which the scores map will be written.
+        :type output_directory: os.PathLike.
+
+        :param tomo_name: name of the tomogram, as pytom-match-pick names it: the name of the
+        tomogram file without extension.
+        :type tomo_name: str.
+
+        :param copy: copy the map instead of linking it.
+        :type copy: bool, optional. Defaults to False.
+
+        :returns: the path of the scores map.
+        """
+        if scores.value_type not in (None, ProbabilityMapValueType.score.value):
+            raise ValueError(
+                f"The annotation [{scores.id}] holds values of type "
+                f"'{scores.value_type}', not template matching scores."
+            )
+        if not scores.path:
+            raise ValueError(f"The annotation [{scores.id}] has no file.")
+        return export_mrc(
+            scores.path,
+            Path(output_directory) / f"{tomo_name}{SCORES_SUFFIX}",
+            voxel_size=get_voxel_size(scores),
+            copy=copy,
         )
 
     @staticmethod

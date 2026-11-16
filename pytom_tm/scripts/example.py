@@ -84,6 +84,13 @@ for star_file in sorted(pytom_dir.rglob(f"*{PARTICLES_SUFFIX}")):
         )
         if coordinates is not None:
             write_coordinates_yaml(coordinates, scratch_dir)
+            # CETS -> pytom-match-pick: the same particles written back as a star file
+            converter.cets_to_pytom_tm(
+                coordinates,
+                scratch_dir / f"{coordinates.id}_cets_to_pytom_tm.star",
+                tomo_name=tomo_name,
+                cut_off=converter.get_cut_off(star_file, tomo_name),
+            )
             n_converted += 1
 
 if not n_converted:

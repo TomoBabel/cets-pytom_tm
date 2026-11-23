@@ -2,6 +2,7 @@
 """CETS -> pytom-match-pick, on the real template matching of TS_03 (see
 ``pytom_tm.tests``)."""
 
+import contextlib
 import shutil
 import tempfile
 from pathlib import Path
@@ -11,17 +12,27 @@ from unittest import TestCase
 import mrcfile
 import numpy as np
 
-from cets_data_model.models.models import PointMatrixSet3D, ProbabilityMapValueType
+from cets_data_model.models.models import (
+    PointMatrixSet3D,
+    ProbabilityMap3D,
+    ProbabilityMapValueType,
+)
+from cets_data_model.utils.yaml_io import load_cets_object
 from pytom_tm.converters.coordinates3d import PytomCoordinates3D
 from pytom_tm.converters.score_tomogram import PytomScoreTomogram
 from pytom_tm.tests import (
     ANGLE_COLUMNS,
     CENTERED_COLUMNS,
+    COORDS_YAML,
+    CUT_OFF,
+    DATA_DIR,
     GRID,
     JOB,
     N_PARTICLES,
     PIXEL_SIZE,
     SCORES_MAP,
+    SCORES_YAML,
+    SEARCH_STD,
     STAR,
     TOMO_ID,
     TOMO_NAME,
@@ -288,3 +299,75 @@ class CetsToPytomScoresTest(CetsToPytomBaseTest):
             converter.cets_to_pytom_tm(
                 scores.model_copy(update={"path": None}), self.test_dir, TOMO_NAME
             )
+
+
+class CetsYamlToPytomTest(CetsToPytomBaseTest):
+    """From the CETS yaml files of ``data/outputs``, as written by ``pytom_tm_to_cets``."""
+
+    @staticmethod
+    def coords_yaml() -> PointMatrixSet3D:
+        return load_cets_object(COORDS_YAML, "coordinates", PointMatrixSet3D)
+
+    @staticmethod
+    def scores_yaml() -> ProbabilityMap3D:
+        return load_cets_object(SCORES_YAML, "scores", ProbabilityMap3D)
+
+    def test_yaml_files_are_up_to_date(self) -> None:
+        """They are what the converters give for the pytom-match-pick files (the scores
+        map with its path relative to ``data``)"""
+        scores = PytomScoreTomogram().pytom_tm_to_cets(
+            SCORES_MAP, TOMO_ID, threshold=CUT_OFF
+        )
+        self.assertEqual(
+            self.scores_yaml(),
+            scores.model_copy(update={"path": "./outputs/TS_03_scores.mrc"}),
+        )
+        coords = PytomCoordinates3D().pytom_tm_to_cets(
+            STAR, TOMO_ID, job=read_job(JOB), score_annotation_id=scores.id
+        )
+        self.assertEqual(self.coords_yaml(), coords)
+
+    def test_coordinates_to_relion5_star(self) -> None:
+        """With the job: the star file pytom-match-pick wrote"""
+        out = PytomCoordinates3D().cets_to_pytom_tm(
+            self.coords_yaml(),
+            self.out_star,
+            TOMO_NAME,
+            cut_off=CUT_OFF,
+            search_std=SEARCH_STD,
+            relion5_compat=True,
+            job=read_job(JOB),
+        )
+        self.assertEqual(read_star_table(out, "particles"), star_table())
+
+    def test_coordinates_to_voxel_star(self) -> None:
+        """Without the job: the star file pytom-match-pick writes without --relion5-compat"""
+        out = PytomCoordinates3D().cets_to_pytom_tm(
+            self.coords_yaml(),
+            self.out_star,
+            TOMO_NAME,
+            cut_off=CUT_OFF,
+            search_std=SEARCH_STD,
+        )
+        self.assertEqual(
+            read_star_table(out, "particles"), to_voxel_flavour(star_table())
+        )
+
+    def test_scores_map(self) -> None:
+        """Its relative path is read from ``data``: linked to the real map"""
+        converter = PytomScoreTomogram()
+        scores = self.scores_yaml()
+        with contextlib.chdir(DATA_DIR):
+            out = converter.cets_to_pytom_tm(scores, self.test_dir / "job", TOMO_NAME)
+        self.assertEqual(out.name, f"{TOMO_NAME}_scores.mrc")
+        self.assertTrue(out.is_symlink())
+        self.assertEqual(out.resolve(), SCORES_MAP.resolve())
+        with contextlib.chdir(DATA_DIR):
+            out = converter.cets_to_pytom_tm(
+                scores, self.test_dir / "copy", TOMO_NAME, copy=True
+            )
+        self.assertFalse(out.is_symlink())
+        self.assertEqual(out.read_bytes(), SCORES_MAP.read_bytes())
+        # From another directory the map is not found
+        with contextlib.chdir(self.test_dir), self.assertRaises(FileNotFoundError):
+            converter.cets_to_pytom_tm(scores, self.test_dir / "other", TOMO_NAME)

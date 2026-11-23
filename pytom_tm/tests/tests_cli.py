@@ -20,6 +20,7 @@ from pytom_tm.cli import main
 from pytom_tm.tests import (
     ANGLE_COLUMNS,
     CENTERED_COLUMNS,
+    COORDS_YAML,
     CUT_OFF,
     DATA_DIR,
     FIRST_PARTICLES,
@@ -29,6 +30,7 @@ from pytom_tm.tests import (
     N_PARTICLES,
     PIXEL_SIZE,
     SCORES_MAP,
+    SCORES_YAML,
     SEARCH_STD,
     STAR,
     TOMO_ID,
@@ -301,6 +303,49 @@ class CetsPytomCliTest(TestCase):
         np.testing.assert_array_equal(mrcfile.read(out), mrcfile.read(SCORES_MAP))
 
     # ------------------------------------------------------------------ errors
+    # ------------------------------------------------------- from the CETS yaml files
+    def test_coordinates_from_cets_yaml(self) -> None:
+        """The coordinates yaml of ``data/outputs``: with the job, the star file
+        pytom-match-pick wrote; without it, the one it writes without --relion5-compat"""
+        from_cets = ["coordinates", "from-cets", "-i", str(COORDS_YAML)]
+        values = ["--cut-off", str(CUT_OFF), "--search-std", str(SEARCH_STD)]
+        self.assert_run(
+            [
+                *from_cets,
+                "-o",
+                str(self.out_star),
+                "--relion5-compat",
+                "--job",
+                str(JOB),
+            ]
+            + values
+        )
+        self.assertEqual(read_star_table(self.out_star, "particles"), star_table())
+        voxel_star = self.dir / "voxel" / f"{TOMO_NAME}_particles.star"
+        self.assert_run([*from_cets, "-o", str(voxel_star), *values])
+        self.assertEqual(
+            read_star_table(voxel_star, "particles"), to_voxel_flavour(star_table())
+        )
+
+    def test_scores_from_cets_yaml(self) -> None:
+        """The scores yaml of ``data/outputs``: its path is relative to ``data``"""
+        from_cets = ["scores", "from-cets", "-i", str(SCORES_YAML), "--output-dir"]
+        out = self.dir / "tm" / f"{TOMO_ID}_scores.mrc"
+        with contextlib.chdir(DATA_DIR):
+            self.assert_run([*from_cets, str(out.parent)])
+        self.assertTrue(out.is_symlink())
+        self.assertEqual(out.resolve(), SCORES_MAP.resolve())
+        with contextlib.chdir(DATA_DIR):
+            self.assert_run([*from_cets, str(self.dir), "--tomo-name", "a", "--copy"])
+        self.assertEqual(
+            (self.dir / "a_scores.mrc").read_bytes(), SCORES_MAP.read_bytes()
+        )
+        # From another directory the map is not found
+        with contextlib.chdir(self.dir):
+            output = self.assert_run([*from_cets, str(self.dir / "other")], 1)
+        self.assertIn("TS_03_scores.mrc", output)
+        self.assertFalse((self.dir / "other").exists())
+
     def test_errors_give_exit_code_1(self) -> None:
         missing = self._coords_args(star=self.dir / "missing_particles.star")
         not_star = self._coords_args(star=JOB)
@@ -348,6 +393,16 @@ class CetsPytomCliTest(TestCase):
         self.assert_run(
             ["scores", "from-cets", "-i", str(self.yaml), "--output-dir", str(self.dir)]
         )
+        self.assert_run(
+            ["coordinates", "from-cets", "-i", str(COORDS_YAML), "-o"]
+            + [str(self.dir / "yaml" / f"{TOMO_NAME}_particles.star")]
+            + ["--relion5-compat", "--job", str(JOB)]
+        )
+        with contextlib.chdir(DATA_DIR):
+            self.assert_run(
+                ["scores", "from-cets", "-i", str(SCORES_YAML), "--output-dir"]
+                + [str(self.dir / "yaml"), "--copy"]
+            )
         self.assertEqual(tree_digest(DATA_DIR), before)
 
     def test_invalid_arguments(self) -> None:

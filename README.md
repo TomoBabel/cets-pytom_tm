@@ -120,8 +120,8 @@ mypy pytom_tm
 | File | What it tests |
 |---|---|
 | `pytom_tm/tests/tests_cets_pytom_tm.py` | pytom-match-pick → CETS: the consistency of the test data, the star file reader, the Euler angles, the job file (found by name, relative paths, RELION5 jobs), the coordinates in both star flavours and the scores map. |
-| `pytom_tm/tests/tests_cets_to_pytom_tm.py` | CETS → pytom-match-pick: star files (round trips in both flavours, centred positions, pixel size, optional columns) and scores maps (links and copies). |
-| `pytom_tm/tests/tests_cli.py` | Every `cets-pytom_tm` sub-command: the outputs are compared with the values of the input files, plus the round trips, the options, the errors and the usage errors. |
+| `pytom_tm/tests/tests_cets_to_pytom_tm.py` | CETS → pytom-match-pick: star files (round trips in both flavours, centred positions, pixel size, optional columns) and scores maps (links and copies), also from the CETS yaml files of the test data. |
+| `pytom_tm/tests/tests_cli.py` | Every `cets-pytom_tm` sub-command: the outputs are compared with the values of the input files (for `from-cets`, the CETS yaml files of the test data give back the files pytom-match-pick wrote), plus the round trips, the options, the errors and the usage errors. |
 
 ```bash
 pytest pytom_tm/tests/tests_cli.py                    # one file
@@ -140,8 +140,13 @@ TS_03 (`pytom_tm/tests/data`, `DATA_DIR` in `pytom_tm/tests/__init__.py`):
 | `outputs/TS_03_scores.mrc` | Scores map: best score of each voxel. |
 | `outputs/TS_03_angles.mrc` | Index of the best of the 108 rotations of each voxel. |
 | `outputs/TS_03_particles.star` | The 401 particles extracted with `--relion5-compat` (cut-off 0.212666): positions in Å from the centre of the tomogram, angles and scores. |
+| `outputs/pytom_tm_coords_TS_03_pytom_tm_to_cets.yaml` | CETS `PointMatrixSet3D` of the particles, as `PytomCoordinates3D().pytom_tm_to_cets` writes it for the star and job files: the input of the `coordinates from-cets` tests. |
+| `outputs/pytom_tm_scores_TS_03_pytom_tm_to_cets.yaml` | CETS `ProbabilityMap3D` of the scores map (threshold: the cut-off): the input of the `scores from-cets` tests. Its `path` (`./outputs/TS_03_scores.mrc`) is relative to `pytom_tm/tests/data`, so the tests read it from that directory. |
 
 The other files the tests need (the star file without `--relion5-compat`, a job of a RELION5
 tomogram, a star file with the particles of several tomograms, ...) are derived from these in
 a temporary directory by the helpers of `pytom_tm/tests/__init__.py`. The files in
-`pytom_tm/tests/data` are never modified by the tests.
+`pytom_tm/tests/data` are never modified by the tests. A test checks that the yaml files are
+still what the converters give for the pytom-match-pick files; if the converters change, write
+them again (`pytom_tm_to_cets` with an `output_directory`) and make the path of the scores map
+relative to `pytom_tm/tests/data` again.

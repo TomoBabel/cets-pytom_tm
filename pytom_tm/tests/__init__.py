@@ -5,7 +5,10 @@
   (``TS_03_dose.txt``) and defocus (``TS_03.defocus``, IMOD format) of its tilt series.
 - ``data/outputs``: what pytom-match-pick wrote for it: the job file (``TS_03_job.json``), the
   scores and angles maps (``TS_03_scores.mrc``, ``TS_03_angles.mrc``) and the particles
-  extracted with ``--relion5-compat`` (``TS_03_particles.star``).
+  extracted with ``--relion5-compat`` (``TS_03_particles.star``); and the CETS yaml files of
+  the particles and the scores map (``pytom_tm_coords_TS_03_pytom_tm_to_cets.yaml``,
+  ``pytom_tm_scores_TS_03_pytom_tm_to_cets.yaml``), the inputs of the CETS -> pytom tests.
+  The path of the scores map in its yaml is relative to ``data``, so it is read from there.
 
 The other variants the tests need (the default flavour of the star file, a job of a RELION5
 tomogram, several tomograms, ...) are derived from these files in a temporary directory.
@@ -33,6 +36,8 @@ JOB = OUTPUTS_DIR / "TS_03_job.json"
 SCORES_MAP = OUTPUTS_DIR / "TS_03_scores.mrc"
 ANGLES_MAP = OUTPUTS_DIR / "TS_03_angles.mrc"
 STAR = OUTPUTS_DIR / "TS_03_particles.star"
+COORDS_YAML = OUTPUTS_DIR / "pytom_tm_coords_TS_03_pytom_tm_to_cets.yaml"
+SCORES_YAML = OUTPUTS_DIR / "pytom_tm_scores_TS_03_pytom_tm_to_cets.yaml"
 
 TOMO_NAME = "TS_03"  # Name of the tomogram file, prefix of the files of the job
 TOMO_ID = "TS_03"  # Id of the CETS tomogram
